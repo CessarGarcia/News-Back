@@ -8,6 +8,7 @@ const conexionDB = async () => {
         console.log("Conectado a DB");
     }catch(error){
         console.log("error al conectar");
+        process.exit(1); //Detenemos la app
     }
 };
 

@@ -26,6 +26,7 @@ const registerUser = async (req, res) =>{
             id: nuevoUsuario.id,
         }
 
+        //Con expiresIn Definimos que el token expira en 1800s = 30min
         jwt.sign(payload, process.env.SECRETA, {expiresIn: 1800}, (error, token) =>{
             res.json({
                 ok: true,
@@ -65,6 +66,7 @@ const loginUser = async (req, res) =>{
             id: usuario.id,
         }
 
+        //Con expiresIn Definimos que el token expira en 1800s = 30min
         jwt.sign(payload, process.env.SECRETA, {expiresIn: 1800}, (error, token) =>{
 
             res.json({
