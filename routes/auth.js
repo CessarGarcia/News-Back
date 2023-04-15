@@ -1,9 +1,9 @@
 const {Router} = require("express");
-const { check } = require("express-validator");
-const { registerUser , loginUser, confirm } = require("../controllers/authControllers");
-const validationErrors = require("../middlewares/validationErrors");
-
 const authRouter = Router();
+const { check } = require("express-validator");
+const { registerUser , loginUser, deleteUser, updateUsuario } = require("../controllers/authControllers");
+const validationErrors = require("../middlewares/validationErrors");
+const User = require("../models/usuario");
 
 authRouter.post("/register", 
     [
@@ -22,11 +22,19 @@ authRouter.post("/login",
     ],
 loginUser);
 
-// authRouter.get(
-//     'confirm/:token', 
-//     [], 
-//     confirm
-// );
+authRouter.get('/user', async (req, res) => {
+    try {
+        const user = await User.find();
+        if(!user){
+            return res.json({msg: "Usuario no encontrado"})
+        }return res.json({user: user})
+    } catch (error) {
+        return res.json({error: error})
+    }
+});
 
+authRouter.delete('/:id', deleteUser)
+
+authRouter.put('/:id', updateUsuario);
 
 module.exports = authRouter;

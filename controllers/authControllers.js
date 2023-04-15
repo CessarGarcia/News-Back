@@ -1,46 +1,53 @@
-const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { validationResult } = require("express-validator");
-const usuarioModel = require("../models/usuario");
-const { getTokenData } = require("../config/jwt.config");
+const User = require("../models/usuario");
+const Role = require("../models/roles");
 const { sendEmail } = require("../config/mail.config");
-const { v4: uuidv4 } = require('uuid');
 
-const registerUser = async (req, res) =>{
-    const {email, password, username } = req.body;
 
+const registerUser = async (req, res) => {
+    const { email, password, username, roles } = req.body;
+
+    if (!email || !password || !username) {
+        return res.json({ msg: "Por favor ingrese todos los datos" })
+    }
     try {
-        let usuario = await usuarioModel.findOne({email});
-        if(usuario){
+        let userExist = await User.findOne({ email });
+        if (userExist) {
             return res.status(501).json({
-                ok: false, 
+                ok: false,
                 msg: "Correo ya registrado"
             });
         }
 
-        // Generar el código
-        const code = uuidv4();
-        const nuevoUsuario = new usuarioModel({email, password, username, code });
-        
-        const salt = bcryptjs.genSaltSync(12);
-        nuevoUsuario.password = bcryptjs.hashSync(password, salt);
+        const nuevoUsuario = new User({ email, password: await User.encryptPassword(password), username });
 
         // Enviar el email
-        await sendEmail(email, username, 'Este es un email de prueba');
-        await nuevoUsuario.save();
+        await sendEmail(email, username, 'Correo enviado por AgensPresse');
 
-        const payload ={
+        // Verificamos el tipo de rol ingresado, si el rol esta vacio se asigna por defecto Role: user 
+        if (roles) {
+            const foundRoles = await Role.find({ name: { $in: roles } })
+            nuevoUsuario.roles = foundRoles.map(role => role._id)
+        } else {
+            const role = await Role.findOne({ name: "user" })
+            nuevoUsuario.roles = [role._id]
+        }
+
+        //Guardamos el usuario
+        const saveUser = await nuevoUsuario.save();
+
+        const payload = {
             id: nuevoUsuario.id,
         }
 
-        //Con expiresIn Definimos que el token expira en 1800s = 30min
-        jwt.sign(payload, process.env.SECRETA, {expiresIn: 1800}, (error, token) =>{
+        // Asignamos token
+        //TODO: Con expiresIn Definimos que el token expira en 1800s = 30min
+        const token = await jwt.sign(payload, process.env.SECRETA, { expiresIn: 1800 }, (error, token) => {
             res.json({
                 ok: true,
-                id: nuevoUsuario.id,
-                username,
                 msg: "Usuario Creado Correctamente",
-                token
+                token,
+                saveUser
             });
         });
     } catch (error) {
@@ -52,61 +59,20 @@ const registerUser = async (req, res) =>{
     }
 };
 
-const confirm = async () => {
-    try {
-        // Obtener el token
-        const { token } = req.params;
-
-        // Verificar la data
-        const data = await getTokenData(token);
-
-        if (data === null) {
-            return res.json({
-                success: false,
-                msg: 'Error al obtener data'
-            });
-        }
-
-        console.log(data);
-
-        const { email, code } = data.data;
-
-        //verificar existencia del usuario
-        let usuario = await usuarioModel.findOne({ email }) || null;
-        if (usuario === null) {
-            return res.json({
-                success: false,
-                msg: 'Usuario no existe'
-            });
-        }
-
-        // Verificar el código
-        if (code !== user.code) {
-            return res.redirect('/error.html')
-        }
-        // Actualizar usuario
-        usuario.status = 'VERIFIED';
-        await nuevoUsuario.save();
-    } catch (error) {
-        console.log(error);
-        return res.json({
-            success: false,
-            msg: 'Error al confirmar usuario'
-        });
-    }
-}
-
 const loginUser = async (req, res) => {
     const { email, password } = req.body;
+    if (!email || !password) {
+        return res.json({ msg: "Por favor ingrese todos los datos" })
+    }
     try {
-        let usuario = await usuarioModel.findOne({ email });
-        if (!usuario) {
+        const userFound = await User.findOne({ email }).populate("roles");
+        if (!userFound) {
             return res.status(401).json({
                 ok: false,
                 msg: "Correo o contraseña incorrecta"
             });
         }
-        const passwordValido = bcryptjs.compareSync(password, usuario.password)
+        const passwordValido = await User.comparePassword(password, userFound.password)
         if (!passwordValido) {
             return res.status(401).json({
                 ok: false,
@@ -114,18 +80,16 @@ const loginUser = async (req, res) => {
             });
         }
         const payload = {
-            id: usuario.id,
+            id: userFound.id,
         }
 
         //TODO: Con expiresIn Definimos que el token expira en 1800s = 30min
         jwt.sign(payload, process.env.SECRETA, { expiresIn: 1800 }, (error, token) => {
-
             res.json({
                 ok: true,
-                id: usuario.id,
-                username: usuario.username,
                 msg: "Login Correcto",
-                token
+                token,
+                userFound
             });
         });
 
@@ -138,8 +102,56 @@ const loginUser = async (req, res) => {
     }
 };
 
+const deleteUser = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const eliminarUsuario = await User.findByIdAndRemove(id);
+        return res.json({
+            ok: true,
+            msg: "Usuario borrado correctamente",
+            eliminarUsuario,
+        });
+    } catch (error) {
+        return res.status(404).json({
+            ok: true,
+            msg: "Usuario no eliminada",
+        });
+    }
+};
+
+const updateUsuario = async (req, res) => {
+    try {
+        const { email, password, username } = req.body;
+		//Requerimos el id del usuario
+        let updateUser = await User.findById(req.params.id);
+
+        //Buscamos si existe el usuario
+        if (!updateUser) {
+            res.status(404).json({ msg: 'El usuario no exite' })
+        }
+        updateUser.email = email;
+        updateUser.password = password;
+        updateUser.username = username;
+
+        updateUser = await User.findByIdAndUpdate({ _id: req.params.id }, updateUser, { new: true })
+        return res.json({
+            ok: true,
+            updateUser,
+            msg: "Usuario actialiazado"
+        });
+    } catch (error) {
+        return res.status(404).json({
+            ok: false,
+            msg: "Usuario no actualizado"
+        })
+    }
+};
+
+
 module.exports = {
     loginUser,
-    confirm,
-    registerUser 
+    registerUser, 
+    deleteUser,
+    updateUsuario,
 };
