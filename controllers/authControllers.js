@@ -60,7 +60,7 @@ const registerUser = async (req, res) => {
 };
 
 const loginUser = async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, roles } = req.body;
     if (!email || !password) {
         return res.json({ msg: "Por favor ingrese todos los datos" })
     }
@@ -81,6 +81,7 @@ const loginUser = async (req, res) => {
         }
         const payload = {
             id: userFound.id,
+            roles: userFound.roles
         }
 
         //TODO: Con expiresIn Definimos que el token expira en 1800s = 30min
@@ -89,6 +90,7 @@ const loginUser = async (req, res) => {
                 ok: true,
                 msg: "Login Correcto",
                 token,
+                roles: userFound.roles,
                 userFound
             });
         });
