@@ -27,6 +27,8 @@ app.use('/', express.static(__dirname +"/public"));
 app.use("/auth", authRouter);
 app.use("/crudNews", newsRouter);
 
+app.get("/auth", authRouter);
+
 app.listen(process.env.PORT , () =>{
     console.log(`Aplicacion corriento EXITOSAMENTE en el puerto ${process.env.PORT}`);
 });
